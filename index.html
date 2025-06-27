@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>로켓 추적기</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=geometry"></script>
+    <style>
+      #map { height: 100vh; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      let map, myMarker, rocketMarker;
+
+      function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+          zoom: 15,
+          center: { lat: 37.0, lng: 127.0 }, // 초기 위치
+        });
+
+        myMarker = new google.maps.Marker({ map, label: "📍나" });
+        rocketMarker = new google.maps.Marker({ map, label: "🚀로켓" });
+
+        // 내 위치 추적
+        navigator.geolocation.watchPosition((pos) => {
+          const myLatLng = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          };
+          myMarker.setPosition(myLatLng);
+          map.setCenter(myLatLng);
+        });
+
+        // 로켓 위치 수신 예시 (가짜 데이터 → 실제로는 WebSocket/WebSerial로)
+        setInterval(() => {
+          const rocketLatLng = {
+            lat: 37.0 + Math.random() * 0.01,
+            lng: 127.0 + Math.random() * 0.01
+          };
+          rocketMarker.setPosition(rocketLatLng);
+
+          const dist = google.maps.geometry.spherical.computeDistanceBetween(
+            myMarker.getPosition(),
+            rocketMarker.getPosition()
+          );
+          console.log("로켓까지 거리:", Math.round(dist), "m");
+        }, 3000);
+      }
+
+      window.onload = initMap;
+    </script>
+  </body>
+</html>
