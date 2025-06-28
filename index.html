@@ -1,24 +1,25 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>ROCKET</title>
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=geometry"></script>
+    <title>로켓 회수 추적기</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=?&libraries=geometry"></script>
     <style>
       #map { height: 100vh; width: 100%; }
-      #connectBtn {
+      #infoBox {
         position: absolute; top: 10px; left: 10px; z-index: 10;
         padding: 10px; background: white; border-radius: 8px;
-        font-size: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       }
     </style>
   </head>
-  <body>5
-    <button id="connectBtn">포트 연결</button>
+  <body>
+    <div id="infoBox">로켓 위치 불러오는 중...</div>
     <div id="map"></div>
 
     <script>
       let map, myMarker, rocketMarker;
-      let port, reader;
+      let myLatLng = null;
+      let rocketLatLng = null;
 
       function initMap() {
         map = new google.maps.Map(document.getElementById("map"), {
@@ -31,73 +32,46 @@
 
         // 내 위치 추적
         navigator.geolocation.watchPosition((pos) => {
-          const myLatLng = {
+          myLatLng = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude
           };
           myMarker.setPosition(myLatLng);
+          if (rocketLatLng) {
+            updateDistance();
+          } else {
+            map.setCenter(myLatLng); // 최초에만 지도 중앙 이동
+          }
         });
+
+        // 로켓 위치는 한 번만 요청
+        fetchRocketPosition();
       }
 
-      async function connectSerial() {
+      async function fetchRocketPosition() {
         try {
-          port = await navigator.serial.requestPort();
-          await port.open({ baudRate: 9600 });
-
-          const decoder = new TextDecoderStream();
-          const inputDone = port.readable.pipeTo(decoder.writable);
-          reader = decoder.readable.getReader();
-
-          let buffer = "";
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            if (value) {
-              buffer += value;
-              let lines = buffer.split('\n');
-              buffer = lines.pop(); // 마지막 줄은 아직 끝 안 났을 수 있음
-
-              for (let line of lines) {
-                handleGPSLine(line.trim());
-              }
-            }
-          }
+          const res = await fetch("http://192.168.55.248:5000/pos"); 
+          rocketLatLng = await res.json();
+          rocketMarker.setPosition(rocketLatLng);
+          document.getElementById("infoBox").innerText = "로켓 위치 고정됨. 거리 계산 중...";
+          updateDistance();
         } catch (err) {
-          alert("포트 연결 실패: " + err);
+          document.getElementById("infoBox").innerText = "로켓 위치 요청 실패!";
+          console.error(err);
         }
       }
 
-      function parseNMEALatLng(rawLat, latDir, rawLng, lngDir) {
-        const latDeg = parseFloat(rawLat.slice(0, 2));
-        const latMin = parseFloat(rawLat.slice(2));
-        const lngDeg = parseFloat(rawLng.slice(0, 3));
-        const lngMin = parseFloat(rawLng.slice(3));
-        let lat = latDeg + latMin / 60;
-        let lng = lngDeg + lngMin / 60;
-        if (latDir === 'S') lat *= -1;
-        if (lngDir === 'W') lng *= -1;
-        return { lat, lng };
-      }
-
-      function handleGPSLine(line) {
-        if (line.startsWith('$GPRMC')) {
-          const parts = line.split(',');
-          if (parts[2] === 'A') { // 유효한 데이터인지 확인
-            const { lat, lng } = parseNMEALatLng(parts[3], parts[4], parts[5], parts[6]);
-            rocketMarker.setPosition({ lat, lng });
-
-            if (myMarker.getPosition()) {
-              const dist = google.maps.geometry.spherical.computeDistanceBetween(
-                myMarker.getPosition(),
-                rocketMarker.getPosition()
-              );
-              console.log("로켓까지 거리:", Math.round(dist), "m");
-            }
-          }
+      function updateDistance() {
+        if (myLatLng && rocketLatLng) {
+          const dist = google.maps.geometry.spherical.computeDistanceBetween(
+            new google.maps.LatLng(myLatLng.lat, myLatLng.lng),
+            new google.maps.LatLng(rocketLatLng.lat, rocketLatLng.lng)
+          );
+          document.getElementById("infoBox").innerText =
+            `고정된 로켓까지 거리: ${Math.round(dist)} m`;
         }
       }
 
-      document.getElementById("connectBtn").addEventListener("click", connectSerial);
       window.onload = initMap;
     </script>
   </body>
